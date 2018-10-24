@@ -82,6 +82,22 @@ class LDAPAuthenticator(Authenticator):
         """
     )
 
+    admin_groups = List(
+        config=True,
+        allow_none=True,
+        default=None,
+        help="""
+        List of LDAP group DNs that users could be members of to be granted admin status.
+
+        If a user is in any one of the listed groups, then that user is granted admin status.
+        Membership is tested by fetching info about each group and looking for the User's
+        dn to be a value of one of `member` or `uniqueMember`, *or* if the username being
+        used to log in with is value of the `uid`.
+
+        Set to an empty list or None to disable.
+        """
+    )
+
     # FIXME: Use something other than this? THIS IS LAME, akin to websites restricting things you
     # can use in usernames / passwords to protect from SQL injection!
     valid_username_regex = Unicode(
@@ -409,8 +425,44 @@ class LDAPAuthenticator(Authenticator):
                 msg = 'username:{username} User not in any of the allowed groups'
                 self.log.warn(msg.format(username=username))
                 return None
+        
+        # This could be offloaded to is_admin (assuming jupyterhub #2244 goes though)
+        # But the connection's already up and running...
+        admin_status = None
+        if self.admin_groups:
+            self.log.debug('Checking admin status for %s in %s', username, self.admin_groups)
+            found = False
+            for group in self.admin_groups:
+                group_filter = (
+                    '(|'
+                    '(member={userdn})'
+                    '(uniqueMember={userdn})'
+                    '(memberUid={uid})'
+                    ')'
+                )
+                group_filter = group_filter.format(
+                    userdn=userdn,
+                    uid=username
+                )
+                group_attributes = ['member', 'uniqueMember', 'memberUid']
+                found = conn.search(
+                    group,
+                    search_scope=ldap3.BASE,
+                    search_filter=group_filter,
+                    attributes=group_attributes
+                )
+                if found:
+                    self.log.info('%s is an administrator, found in %s', username, group)
+                    admin_status = True
+                    break
+            if not found:
+                self.log.info('%s not found in any admin group', username)
+                admin_status = False
 
-        return username
+        return {
+            'name': username,
+            'admin': admin_status
+        }
 
 
 if __name__ == "__main__":

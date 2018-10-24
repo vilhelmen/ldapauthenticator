@@ -90,6 +90,23 @@ c.LDAPAuthenticator.allowed_groups = [
 ]
 ```
 
+#### `LDAPAuthenticator.admin_groups` ####
+
+LDAP groups whose members are granted admin status. This must be
+set to either empty `[]` (the default, to disable) or to a list of
+full DNs that have a `member` attribute that includes the current
+user attempting to log in.
+
+As an example, to restrict admin status to people in groups
+`machine_admins` or `jupyter_admins`,
+
+```python
+c.LDAPAuthenticator.admin_groups = [
+    "cn=machine_admins,ou=groups,dc=wikimedia,dc=org",
+    "cn=jupyter_admins,ou=groups,dc=wikimedia,dc=org",
+]
+```
+
 #### `LDAPAuthenticator.valid_username_regex` ####
 
 All usernames will be checked against this before being sent
