@@ -160,7 +160,7 @@ class LDAPAuthenticator(Authenticator):
         """
     )
 
-    lookup_dn_search_filter = Unicode(
+    search_dn_filter = Unicode(
         config=True,
         default_value='({username_attribute}={username})',
         allow_none=True,
@@ -198,7 +198,7 @@ class LDAPAuthenticator(Authenticator):
     #
     #     try:
     #         # test search filter at least is shaped correctly
-    #         self.lookup_dn_search_filter.format(username_attribute=self.username_attribute,
+    #         self.search_dn_filter.format(username_attribute=self.username_attribute,
     #                                             username='format_test')
     #     except Exception as err:
     #         self.log.critical("LDAP search filter malformed! Missing 'username_attribute' or 'username': %s", err)
@@ -246,7 +246,6 @@ class LDAPAuthenticator(Authenticator):
             raise RuntimeError('User missing DN in auth_state profile')
         return user_dn
 
-
     def _check_ldap_group_membership(self, authentication, group_list):
         membership_filter = '(|' + ''.join(
             ['(memberOf={})'.format(escape_filter_chars(x)) for x in set(group_list)]
@@ -260,7 +259,6 @@ class LDAPAuthenticator(Authenticator):
             self.log.debug('Membership test says: %s', len(ldap.response) > 0)
             return len(ldap.response) > 0
 
-
     def is_admin(self, handler, data, authentication, *args, **kwargs):
         super_admin = super().is_admin(handler, data, authentication, *args, **kwargs)
         if super_admin:
@@ -272,7 +270,10 @@ class LDAPAuthenticator(Authenticator):
             return super_admin
 
     def build_profile(self, handler, data, username, authentication, *args, **kwargs):
-        super_profile = super().build_profile(handler, data, authentication, *args, **kwargs)
+        # TODO: Figure out username/data selection
+
+        # super_profile = super().build_profile(handler, data, authentication, *args, **kwargs)
+        super_profile = {}
 
         # TODO: set a profile default of {} in get_authenticated_user
         profile = authentication['auth_state']['profile']
@@ -285,7 +286,7 @@ class LDAPAuthenticator(Authenticator):
             with self.build_connection(self.search_user_dn, self.search_user_password) as ldap:
                 # Load UID/GID/memberOf
                 # TODO: When memberOf overlay id optional, it probably needs to N group lookups no matter what to simplify
-                self.log.sebug("Loading UID/GID/MemberOf for profile")
+                self.log.debug("Loading UID/GID/MemberOf for profile")
                 ldap.search(search_base=user_dn, search_filter='(objectClass=*)', search_scope=ldap3.BASE,
                             attributes=[self.profile_uid_attribute, self.profile_gid_attribute, 'memberOf'])
 
@@ -296,11 +297,11 @@ class LDAPAuthenticator(Authenticator):
 
                 profile['uid'] = user_entry[self.profile_uid_attribute].value
                 profile['gid'] = user_entry[self.profile_gid_attribute].value
-                self.log.sebug('Found UID %s and GID %s', profile['uid'], profile['gid'])
+                self.log.debug('Found UID %s and GID %s', profile['uid'], profile['gid'])
 
                 # I don't trust user/server escaping to line up... But I'll go with it for now
                 target_groups = set(self.profile_groups)
-                intersect_groups = target_groups & set(e['memberOf'].value)
+                intersect_groups = target_groups & set(user_entry['memberOf'].value)
                 self.log.debug('Group overlap to enumerate: %s', intersect_groups)
 
                 # FIXME: Better name for dict?
@@ -311,14 +312,14 @@ class LDAPAuthenticator(Authenticator):
                 profile['group_map'] = {profile['gid']: username}
                 for group in intersect_groups:
                     ldap.search(search_base=group, search_filter='(objectClass=*)', search_scope=ldap3.BASE,
-                                attributes=[self.profile_gid_attribute,self.profile_group_name_attribute])
+                                attributes=[self.profile_gid_attribute, self.profile_group_name_attribute])
 
                     if len(ldap.response) != 1:
                         raise RuntimeError('Profile build group search got bad result length %s for %s',
                                            len(ldap.response), group)
 
                     group_entry = ldap.entries[0]
-                    profile['group_map'][group_entry[self.profile_gid_attribute]] = group_entry[self.profile_group_name_attribute]
+                    profile['group_map'][group_entry[self.profile_gid_attribute].value] = group_entry[self.profile_group_name_attribute].value
 
             self.log.debug('Profile enumerated: %s', profile)
         return
@@ -333,8 +334,8 @@ class LDAPAuthenticator(Authenticator):
         """
 
         # Hopefully this will catch a poorly formatted search filter
-        search_filter = self.lookup_dn_search_filter.format(username_attribute=self.username_attribute,
-                                                            username=username)
+        search_filter = self.search_dn_filter.format(username_attribute=self.username_attribute,
+                                                     username=username)
 
         self.log.debug('Attempting to resolve "%s" with base: "%s" and filter: "%s"', username, self.server_address,
                        self.user_search_base, search_filter)
@@ -361,8 +362,9 @@ class LDAPAuthenticator(Authenticator):
             raise
 
     def check_whitelist(self, username, authentication, *args, **kwargs):
-        if super().check_whitelist(username, authentication, *args, **kwargs):
-            return True
+        # TODO: uncomment when hub is updated
+        # if super().check_whitelist(username, authentication, *args, **kwargs):
+        #     return True
 
         if self.whitelist_groups:
             return self._check_ldap_group_membership(authentication, self.whitelist_groups)
@@ -370,8 +372,9 @@ class LDAPAuthenticator(Authenticator):
             return True
 
     def check_blacklist(self, username, authentication, *args, **kwargs):
-        if super().check_blacklist(username, authentication, *args, **kwargs):
-            return True
+        # TODO: uncomment when hub is updated
+        # if super().check_blacklist(username, authentication, *args, **kwargs):
+        #    return True
 
         if self.blacklist_groups:
             return self._check_ldap_group_membership(authentication, self.blacklist_groups)
@@ -428,29 +431,80 @@ class LDAPAuthenticator(Authenticator):
 
 if __name__ == "__main__":
     import getpass
-    c = LDAPAuthenticator()
+    import json
+    from pathlib import Path
+    from traitlets.config.application import Application
 
-    c.server_address = input('server_address: ')
-    c.server_port = int(input('server_port: '))
-    c.use_ssl = input('use_ssl: ') == 'True'  # less than ideal
-    c.search_user_dn = input('search_user_dn: ')
-    if c.search_user_dn == '':
-        c.search_user_dn = None
-    c.search_user_password = getpass.getpass('search_user_password: ')
-    if c.search_user_password == '':
-        c.search_user_password = None
+    # Traitlets doesn't actually say HOW to do a configuration file, just that it CAN do them
+    # https://traitlets.readthedocs.io/en/stable/config.html
+    # I eventually reverse-engineered it from traitlet source examples
+    conf_file = Path('test_config.json')
 
-    c.user_search_base = input('user_search_base: ')
-    c.username_attribute = input('username_attribute: ')
-    c.lookup_dn_search_filter = input('lookup_dn_search_filter: ')
+    class TestLDAPAuthenticator(LDAPAuthenticator, Application):
+        config_file = Unicode('test_config.json')
+
+        def __init__(self):
+            super().__init__()
+            if self.config_file:
+                self.load_config_file(self.config_file)
+
+    if not conf_file.exists():
+        print('Writing example configuration file. Configure and rerun to test.')
+        with conf_file.open('w') as output:
+            output.write(json.dumps({
+                'version': 1,
+                'LDAPAuthenticator': {
+                    'server_address': 'ldap.company.org',
+                    'server_port': 3268,
+                    'use_ssl': False,
+                    'whitelist_groups': ['CN=hub_users,CN=Groups,DC=ldap,DC=company,DC=org',
+                                         'CN=instructors,CN=Groups,DC=ldap,DC=company,DC=org',
+                                         'CN=students,CN=Groups,DC=ldap,DC=company,DC=org',
+                                         'CN=admins,CN=Groups,DC=ldap,DC=company,DC=org'],
+                    'blacklist_groups': ['CN=withdrawn,CN=Groups,DC=ldap,DC=company,DC=org'],
+                    'admin_groups': ['CN=admins,CN=Groups,DC=ldap,DC=company,DC=org',
+                                     'CN=instructors,CN=Groups,DC=ldap,DC=company,DC=org'],
+                    'build_user_profile': True,
+                    'profile_groups': ['CN=hub_users,CN=Groups,DC=ldap,DC=company,DC=org',
+                                       'CN=dataset_reader,CN=Groups,DC=ldap,DC=company,DC=org'],
+                    'profile_uid_attribute': 'uidNumber',
+                    'profile_gid_attribute': 'gidNumber',
+                    'profile_group_name_attribute': 'cn',
+                    'valid_username_regex': r'^[a-z][.a-z0-9_-]*$',
+                    'user_search_base': 'CN=Users,DC=ldap,DC=company,DC=org',
+                    'username_attribute': 'sAMAccountname',
+                    'search_dn_filter': '({username_attribute}={username})',
+                    'search_user_dn': 'CN=ldap_reader,CN=Services,DC=ldap,DC=company,DC=org',
+                    'search_user_password': 'hunter2',
+                }
+            }, indent=2))
+        exit(0)
+
+    c = TestLDAPAuthenticator()
+
+    print("Testing auth...")
 
     auth_result = c.authenticate(None, {
         'username': input('LDAP test login: '),
         'password': getpass.getpass()
     })
 
-    auth_status = auth_result.result()
+    auth_result = auth_result.result()
 
-    print(auth_status)
+    print(auth_result)
 
-    # anything else it too complicated for now.
+    auth_result['name'] = username = c.normalize_username(auth_result['name'])
+
+    print("Testing blacklist...")
+    print(c.check_blacklist(auth_result['name'], auth_result))
+
+    print("Testing whitelist...")
+    print(c.check_whitelist(auth_result['name'], auth_result))
+
+    if c.build_user_profile:
+        print("Building profile...")
+        c.build_profile(None, None, auth_result['name'], auth_result)
+        print(auth_result)
+    else:
+        print("Profiling disabled.")
+
