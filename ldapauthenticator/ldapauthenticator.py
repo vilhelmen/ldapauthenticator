@@ -259,8 +259,8 @@ class LDAPAuthenticator(Authenticator):
             self.log.debug('Membership test says: %s', len(ldap.response) > 0)
             return len(ldap.response) > 0
 
-    def is_admin(self, handler, data, authentication, *args, **kwargs):
-        super_admin = super().is_admin(handler, data, authentication, *args, **kwargs)
+    def is_admin(self, handler, authentication):
+        super_admin = super().is_admin(handler, authentication)
         if super_admin:
             return True
         elif self.admin_groups:
@@ -269,10 +269,10 @@ class LDAPAuthenticator(Authenticator):
             # Either a False (strip admin) or a None (no change)
             return super_admin
 
-    def build_profile(self, handler, data, username, authentication, *args, **kwargs):
+    def build_profile(self, handler, authentication):
         # TODO: Figure out username/data selection
 
-        # super_profile = super().build_profile(handler, data, authentication, *args, **kwargs)
+        # super_profile = super().build_profile(handler, authentication)
         super_profile = {}
 
         # TODO: set a profile default of {} in get_authenticated_user
@@ -361,9 +361,9 @@ class LDAPAuthenticator(Authenticator):
             self.log.error('LDAP DN resolution raised while resolving %s: %s', username, err)
             raise
 
-    def check_whitelist(self, username, authentication, *args, **kwargs):
+    def check_whitelist(self, username, authentication):
         # TODO: uncomment when hub is updated
-        # if super().check_whitelist(username, authentication, *args, **kwargs):
+        # if super().check_whitelist(username, authentication):
         #     return True
 
         if self.whitelist_groups:
@@ -371,9 +371,9 @@ class LDAPAuthenticator(Authenticator):
         else:
             return True
 
-    def check_blacklist(self, username, authentication, *args, **kwargs):
+    def check_blacklist(self, username, authentication):
         # TODO: uncomment when hub is updated
-        # if super().check_blacklist(username, authentication, *args, **kwargs):
+        # if super().check_blacklist(username, authentication):
         #    return True
 
         if self.blacklist_groups:
@@ -382,7 +382,7 @@ class LDAPAuthenticator(Authenticator):
             return True
 
     @gen.coroutine
-    def authenticate(self, handler, data, *args, **kwargs):
+    def authenticate(self, handler, data):
         """Resolve a username to a dn and check password. Adds dn to auth_state"""
         username = data['username']
         password = data['password']
