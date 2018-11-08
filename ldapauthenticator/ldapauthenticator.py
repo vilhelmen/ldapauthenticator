@@ -412,7 +412,7 @@ class LDAPAuthenticator(Authenticator):
         try:
             self.build_connection(user_dn, password)
         except Exception as err:
-            if isinstance(err, ldap3.core.exceptions.LDAPBindError):
+            if isinstance(err, ldap3.core.exceptions.LDAPBindError) or isinstance(err, ldap3.core.exceptions.LDAPInvalidCredentialsResult):
                 self.log.info('Password rejected for %s', username)
                 return None
             raise
