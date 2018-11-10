@@ -260,14 +260,15 @@ class LDAPAuthenticator(Authenticator):
             return len(ldap.response) > 0
 
     def is_admin(self, handler, authentication):
-        super_admin = super().is_admin(handler, authentication)
-        if super_admin:
-            return True
-        elif self.admin_groups:
+        # super_admin = super().is_admin(handler, authentication)
+        # if super_admin:
+        #     return True
+        if self.admin_groups:
             return self._check_ldap_group_membership(authentication, self.admin_groups)
         else:
             # Either a False (strip admin) or a None (no change)
-            return super_admin
+            # return super_admin
+            return None
 
     def build_profile(self, handler, authentication):
         # TODO: Figure out username/data selection
@@ -309,7 +310,7 @@ class LDAPAuthenticator(Authenticator):
                 # I want all groups to have a resolved name. This is "private" in name only by default.
                 # If profile_groups pulls in this gid, it will overwrite
                 # FIXME: Put normalized username in the authenticated dictionary? authenticated['normalized_name']?
-                profile['group_map'] = {profile['gid']: username}
+                profile['group_map'] = {profile['gid']: authentication['name']}
                 for group in intersect_groups:
                     ldap.search(search_base=group, search_filter='(objectClass=*)', search_scope=ldap3.BASE,
                                 attributes=[self.profile_gid_attribute, self.profile_group_name_attribute])
@@ -337,7 +338,7 @@ class LDAPAuthenticator(Authenticator):
         search_filter = self.search_dn_filter.format(username_attribute=self.username_attribute,
                                                      username=username)
 
-        self.log.debug('Attempting to resolve "%s" with base: "%s" and filter: "%s"', username, self.server_address,
+        self.log.debug('Attempting to resolve "%s" with base: "%s" and filter: "%s"', username,
                        self.user_search_base, search_filter)
 
         try:
@@ -361,25 +362,25 @@ class LDAPAuthenticator(Authenticator):
             self.log.error('LDAP DN resolution raised while resolving %s: %s', username, err)
             raise
 
-    def check_whitelist(self, username, authentication):
-        # TODO: uncomment when hub is updated
-        # if super().check_whitelist(username, authentication):
-        #     return True
+    # def check_whitelist(self, username, authentication):
+    #     # TODO: uncomment when hub is updated
+    #     # if super().check_whitelist(username, authentication):
+    #     #     return True
 
-        if self.whitelist_groups:
-            return self._check_ldap_group_membership(authentication, self.whitelist_groups)
-        else:
-            return True
+    #     if self.whitelist_groups:
+    #         return self._check_ldap_group_membership(authentication, self.whitelist_groups)
+    #     else:
+    #         return True
 
-    def check_blacklist(self, username, authentication):
-        # TODO: uncomment when hub is updated
-        # if super().check_blacklist(username, authentication):
-        #    return True
+    # def check_blacklist(self, username, authentication):
+    #     # TODO: uncomment when hub is updated
+    #     # if super().check_blacklist(username, authentication):
+    #     #    return True
 
-        if self.blacklist_groups:
-            return self._check_ldap_group_membership(authentication, self.blacklist_groups)
-        else:
-            return True
+    #     if self.blacklist_groups:
+    #         return self._check_ldap_group_membership(authentication, self.blacklist_groups)
+    #     else:
+    #         return True
 
     @gen.coroutine
     def authenticate(self, handler, data):
@@ -412,14 +413,14 @@ class LDAPAuthenticator(Authenticator):
         try:
             self.build_connection(user_dn, password)
         except Exception as err:
-            if isinstance(err, ldap3.core.exceptions.LDAPBindError):
+            if isinstance(err, ldap3.core.exceptions.LDAPBindError) or isinstance(err, ldap3.core.exceptions.LDAPInvalidCredentialsResult):
                 self.log.info('Password rejected for %s', username)
                 return None
             raise
 
         # We've looked up the username and validated the password, they pass this phase
 
-        return {
+        auth_data = {
             'name': username,
             'auth_state': {
                 'profile': {
@@ -427,6 +428,12 @@ class LDAPAuthenticator(Authenticator):
                 }
             }
         }
+
+        auth_data['admin'] = self.is_admin(handler, auth_data)
+
+        self.build_profile(handler, auth_data)
+
+        return auth_data
 
 
 if __name__ == "__main__":
