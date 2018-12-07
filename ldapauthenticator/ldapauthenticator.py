@@ -11,16 +11,16 @@ class LDAPAuthenticator(Authenticator):
     server_address = Unicode(
         config=True,
         help="""
-        IP address or hostname of the LDAP server to contact.
-        """
+            IP address or hostname of the LDAP server to contact.
+            """
     )
     server_port = Int(
         config=True,
         help="""
-        Port on which to contact the LDAP server.
+            Port on which to contact the LDAP server.
 
-        Defaults to `636` if `use_ssl` is set, `389` otherwise.
-        """
+            Defaults to `636` if `use_ssl` is set, `389` otherwise.
+            """
     )
 
     def _server_port_default(self):
@@ -33,11 +33,11 @@ class LDAPAuthenticator(Authenticator):
         False,
         config=True,
         help="""
-        Use SSL to communicate with the LDAP server.
+            Use SSL to communicate with the LDAP server.
 
-        Deprecated in version 3 of LDAP in favor of Start TLS.
-        Your LDAP server must be configured to support this, however.
-        """
+            Deprecated in version 3 of LDAP in favor of Start TLS.
+            Your LDAP server must be configured to support this, however.
+            """
     )
 
     whitelist_groups = List(
@@ -45,13 +45,13 @@ class LDAPAuthenticator(Authenticator):
         allow_none=True,
         default=None,
         help="""
-        List of LDAP group DNs that grant access.
+            List of LDAP group DNs that grant access.
 
-        if a user is in any of the listed groups, they are allowed access.
-        Membership is currently only tested using the MemberOf overlay.
+            if a user is in any of the listed groups, they are allowed access.
+            Membership is currently only tested using the MemberOf overlay.
 
-        Set to an empty list or None to allow all users with a valid account to login.
-        """
+            Set to an empty list or None to allow all users with a valid account to login.
+            """
     )
 
     blacklist_groups = List(
@@ -73,8 +73,8 @@ class LDAPAuthenticator(Authenticator):
         default_value=None,
         allow_none=True,
         help="""
-        List of groups that grant administrator status. Can be overridden by admin_users.
-        """
+            List of groups that grant administrator status. Can be overridden by admin_users.
+            """
     )
 
     build_user_profile = Bool(
@@ -82,8 +82,8 @@ class LDAPAuthenticator(Authenticator):
         default_value=False,
         allow_none=True,
         help="""
-        Build user profile for spawner cooperation. Saves the user's UID, GID, and group memberships
-        """
+            Build user profile for spawner cooperation. Saves the user's UID, GID, and group memberships
+            """
     )
 
     profile_groups = List(
@@ -91,8 +91,9 @@ class LDAPAuthenticator(Authenticator):
         default_value=None,
         allow_none=True,
         help="""
-        List of groups to check when building the user's auth profile.
-        """
+            List of groups to check when building the user's auth profile.
+            All groups in the list will be added to the container, with correct user membership.
+            """
     )
 
     profile_uid_attribute = Unicode(
@@ -109,8 +110,8 @@ class LDAPAuthenticator(Authenticator):
         default_value='gidNumber',
         allow_none=False,
         help="""
-        LDAP attribute corresponding to a gid. Defaults to 'gidNumber'.
-        """
+            LDAP attribute corresponding to a gid. Defaults to 'gidNumber'.
+            """
     )
 
     profile_group_name_attribute = Unicode(
@@ -128,15 +129,15 @@ class LDAPAuthenticator(Authenticator):
         r'^[a-z][.a-z0-9_-]*$',
         config=True,
         help="""
-        Regex for validating usernames - those that do not match this regex will be rejected.
+            Regex for validating usernames - those that do not match this regex will be rejected.
 
-        This is primarily used as a measure against LDAP injection, which has fatal security
-        considerations. The default works for most LDAP installations, but some users might need
-        to modify it to fit their custom installs. If you are modifying it, be sure to understand
-        the implications of allowing additional characters in usernames and what that means for
-        LDAP injection issues. See https://www.owasp.org/index.php/LDAP_injection for an overview
-        of LDAP injection.
-        """
+            This is primarily used as a measure against LDAP injection, which has fatal security
+            considerations. The default works for most LDAP installations, but some users might need
+            to modify it to fit their custom installs. If you are modifying it, be sure to understand
+            the implications of allowing additional characters in usernames and what that means for
+            LDAP injection issues. See https://www.owasp.org/index.php/LDAP_injection for an overview
+            of LDAP injection.
+            """
     )
 
     user_search_base = Unicode(
@@ -144,11 +145,11 @@ class LDAPAuthenticator(Authenticator):
         default=None,
         allow_none=True,
         help="""
-        Search base for looking up user accounts.
+            Search base for looking up user accounts.
 
-        LDAPAuthenticator will search all objects matching under this base where the `user_attribute`
-        matches the given login name.
-        """
+            LDAPAuthenticator will search all objects matching under this base where the `user_attribute`
+            matches the given login name.
+            """
     )
 
     username_attribute = Unicode(
@@ -156,8 +157,8 @@ class LDAPAuthenticator(Authenticator):
         default=None,
         allow_none=True,
         help="""
-        LDAP attribute containing the user's username. Most use uid, Active Directory uses sAMAccountname.
-        """
+            LDAP attribute containing the user's username. Most use uid, Active Directory uses sAMAccountname.
+            """
     )
 
     search_dn_filter = Unicode(
@@ -165,8 +166,8 @@ class LDAPAuthenticator(Authenticator):
         default_value='({username_attribute}={username})',
         allow_none=True,
         help="""
-        Query for user lookup, should at least contain a match between {username_attribute} and {username}.
-        """
+            Query for user lookup, should at least contain a match between {username_attribute} and {username}.
+            """
     )
 
     search_user_dn = Unicode(
@@ -174,11 +175,11 @@ class LDAPAuthenticator(Authenticator):
         default_value=None,
         allow_none=True,
         help="""
-        Account to perform user lookups through.
+            Account to perform user lookups through.
 
-        If lookup_dn_search_user and search_user_password are None, an anonymous bind will be used.
-        Anonymous binds should be discouraged for security purposes.
-        """
+            If lookup_dn_search_user and search_user_password are None, an anonymous bind will be used.
+            Anonymous binds should be discouraged for security purposes.
+            """
     )
 
     search_user_password = Unicode(
@@ -186,8 +187,8 @@ class LDAPAuthenticator(Authenticator):
         default_value=None,
         allow_none=True,
         help="""
-        Password for the lookup account.
-        """
+            Password for the lookup account.
+            """
     )
 
     # TODO memberOf overlay toggle for whiteliisting
@@ -311,7 +312,8 @@ class LDAPAuthenticator(Authenticator):
                 # If profile_groups pulls in this gid, it will overwrite
                 # FIXME: Put normalized username in the authenticated dictionary? authenticated['normalized_name']?
                 profile['group_map'] = {profile['gid']: authentication['name']}
-                for group in intersect_groups:
+                profile['group_membership'] = set(profile['gid'])
+                for group in target_groups:
                     ldap.search(search_base=group, search_filter='(objectClass=*)', search_scope=ldap3.BASE,
                                 attributes=[self.profile_gid_attribute, self.profile_group_name_attribute])
 
@@ -321,6 +323,8 @@ class LDAPAuthenticator(Authenticator):
 
                     group_entry = ldap.entries[0]
                     profile['group_map'][group_entry[self.profile_gid_attribute].value] = group_entry[self.profile_group_name_attribute].value
+                    if group in intersect_groups:
+                        profile['group_membership'].add(group_entry[self.profile_gid_attribute].value)
 
             self.log.debug('Profile enumerated: %s', profile)
         return
