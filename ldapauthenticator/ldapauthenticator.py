@@ -325,6 +325,7 @@ class LDAPAuthenticator(Authenticator):
                     if group in intersect_groups:
                         profile['group_membership'].add(group_entry[self.profile_gid_attribute].value)
 
+            profile['group_membership'] = list(profile['group_membership'])
             self.log.debug('Profile enumerated: %s', profile)
         return
 
