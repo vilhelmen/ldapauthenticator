@@ -311,7 +311,7 @@ class LDAPAuthenticator(Authenticator):
                 # If profile_groups pulls in this gid, it will overwrite
                 # FIXME: Put normalized username in the authenticated dictionary? authenticated['normalized_name']?
                 profile['group_map'] = {profile['gid']: authentication['name']}
-                profile['group_membership'] = set(profile['gid'])
+                profile['group_membership'] = set([profile['gid']])
                 for group in target_groups:
                     ldap.search(search_base=group, search_filter='(objectClass=*)', search_scope=ldap3.BASE,
                                 attributes=[self.profile_gid_attribute, self.profile_group_name_attribute])
