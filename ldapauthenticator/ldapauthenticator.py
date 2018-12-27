@@ -367,15 +367,12 @@ class LDAPAuthenticator(Authenticator):
             self.log.error('LDAP DN resolution raised while resolving %s: %s', username, err)
             raise
 
-    # def check_whitelist(self, username, authentication):
-    #     # TODO: uncomment when hub is updated
-    #     # if super().check_whitelist(username, authentication):
-    #     #     return True
-
-    #     if self.whitelist_groups:
-    #         return self._check_ldap_group_membership(authentication, self.whitelist_groups)
-    #     else:
-    #         return True
+    def check_whitelist(self, username):
+        if self.whitelist_groups:
+            user_dn = self.user_dn_lookup(self.build_connection(self.search_user_dn, self.search_user_password), username)
+            return self._check_ldap_group_membership({'auth_state': {'profile': {'dn': user_dn}}}, self.whitelist_groups)
+        else:
+            return True
 
     # def check_blacklist(self, username, authentication):
     #     # TODO: uncomment when hub is updated
