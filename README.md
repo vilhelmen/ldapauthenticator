@@ -18,7 +18,7 @@ conda install -c conda-forge jupyterhub-ldapauthenticator
 ## Logging people out ##
 
 If you make any changes to JupyterHub's authentication setup that changes
-which group of users is allowed to login (such as changing `allowed_groups`
+which group of users is allowed to login (such as changing `whitelist_groups`
 or even just turning on LDAPAuthenticator), you **must** change the
 jupyterhub cookie secret, or users who were previously logged in and did
 not log out would continue to be able to log in!
@@ -38,7 +38,7 @@ c.JupyterHub.authenticator_class = 'ldapauthenticator.LDAPAuthenticator'
 
 ### Required configuration ###
 
-At minimum, the following two configuration options must be set before
+At minimum, the following configuration options must be set before
 the LDAP Authenticator can be used:
 
 
@@ -48,47 +48,76 @@ Address of the LDAP Server to contact. Just use a bare hostname or IP,
 without a port name or protocol prefix.
 
 
-#### `LDAPAuthenticator.bind_dn_template` ####
+#### `LDAPAuthenticator.user_search_base` ####
 
-Template used to generate the full dn for a user from the human readable
-username. This must be set to either empty `[]` or to a list of templates the
-users belong to. For example, if some of the users in your LDAP database have DN
-of the form `uid=Yuvipanda,ou=people,dc=wikimedia,dc=org` and some other users
-have DN like `uid=Mike,ou=developers,dc=wikimedia,dc=org` where Yuvipanda and
-Mike are the usernames, you would set this config item to be:
+This is the search base used when matching usernames to domain users.
 
 ```python
-c.LDAPAuthenticator.bind_dn_template = [
-    "uid={username},ou=people,dc=wikimedia,dc=org",
-    "uid={username},ou=developers,dc=wikimedia,dc=org",
-]
+c.LDAPAuthenticator.user_search_base = 'OU=Users,DC=company,DC=org'
+```
+
+#### `LDAPAuthenticator.username_attribute` ####
+
+This is the attribute in the domain that contains the username.
+Most use `uid`, AD uses `sAMAccountName`. 
+
+```python
+c.LDAPAuthenticator.username_attribute = 'uid'
+```
+
+#### `LDAPAuthenticator.search_user_dn` `LDAPAuthenticator.search_user_password` ####
+
+The username and password of the account used to perform username resolution.
+
+```python
+c.LDAPAuthenticator.search_user_dn = 'CN=ldap_reader,OU=Services,DC=company,DC=org'
+c.LDAPAuthenticator.search_user_password = 'hunter2'
 ```
 
 Don't forget the preceeding `c.` for setting configuration parameters! JupyterHub
 uses [traitlets](https://traitlets.readthedocs.io) for configuration, and the
 `c` represents the [config object](https://traitlets.readthedocs.io/en/stable/config.html).
 
-The `{username}` is expanded into the username the user provides.
-
 
 ### Optional configuration ###
 
-#### `LDAPAuthenticator.allowed_groups` ####
+#### `LDAPAuthenticator.whitelist_groups` ####
 
-LDAP groups whose members are allowed to log in. This must be
-set to either empty `[]` (the default, to disable) or to a list of
-full DNs that have a `member` attribute that includes the current
-user attempting to log in.
-
-As an example, to restrict access only to people in groups
-`researcher` or `operations`,
+List of LDAP groups that users must be a member of to login.
+Uses memberOf overlay to check for membership.
 
 ```python
-c.LDAPAuthenticator.allowed_groups = [
-    "cn=researcher,ou=groups,dc=wikimedia,dc=org",
-    "cn=operations,ou=groups,dc=wikimedia,dc=org",
-]
+c.LDAPAuthenticator.whitelist_groups = ['CN=hub_users,OU=Groups,DC=company,DC=org',
+                                        'CN=instructors,OU=Groups,DC=company,DC=org',
+                                        'CN=students,OU=Groups,DC=company,DC=org',
+                                        'CN=admins,OU=Groups,DC=company,DC=org']
 ```
+
+
+#### `LDAPAuthenticator.blacklist_groups` ####
+
+List of LDAP groups that users must **not** be a member of to login.
+Uses memberOf overlay to check for membership.
+
+```python
+c.LDAPAuthenticator.blacklist_groups = ['CN=disabled,OU=Groups,DC=company,DC=org']
+```
+
+#### `LDAPAuthenticator.admin_groups` ####
+
+List of LDAP groups that grant admin privileges.
+Uses memberOf overlay to check for membership.
+
+```python
+c.LDAPAuthenticator.admin_groups = ['CN=admins,OU=Groups,DC=company,DC=org',
+                                    'CN=instructors,OU=Groups,DC=company,DC=org']
+```
+
+#### `LDAPAuthenticator.allowed_groups` ####
+
+#### `LDAPAuthenticator.allowed_groups` ####
+
+#### `LDAPAuthenticator.allowed_groups` ####
 
 #### `LDAPAuthenticator.valid_username_regex` ####
 
@@ -101,10 +130,10 @@ is what most shell username validators do.
 
 #### `LDAPAuthenticator.use_ssl` ####
 
-Boolean to specify whether to use SSL encryption when contacting
+Boolean to specify whether to use deprecated LDAPS connection to
 the LDAP server. If it is left to `False` (the default)
 `LDAPAuthenticator` will try to upgrade connection with StartTLS.
-Set this to be `True` to start SSL connection.
+Set this to be `True` to use SSL connection.
 
 #### `LDAPAuthenticator.server_port` ####
 

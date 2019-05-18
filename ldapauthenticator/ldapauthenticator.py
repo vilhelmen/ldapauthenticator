@@ -27,7 +27,7 @@ class LDAPAuthenticator(Authenticator):
         if self.use_ssl:
             return 636  # default SSL port for LDAP
         else:
-            return 389  # default plaintext port for LDAP
+            return 389  # default plaintext/StartTLS port for LDAP
 
     use_ssl = Bool(
         False,
@@ -35,10 +35,11 @@ class LDAPAuthenticator(Authenticator):
         help="""
             Use SSL to communicate with the LDAP server.
 
-            Deprecated in version 3 of LDAP in favor of Start TLS.
-            Your LDAP server must be configured to support this, however.
+            LDAPS was deprecated in version 3 of LDAP in favor of Start TLS, which will be used by default.
             """
     )
+
+    # TODO Enable support for domains that don't support memberOf overlay (who does this?)?
 
     whitelist_groups = List(
         config=True,
@@ -77,6 +78,8 @@ class LDAPAuthenticator(Authenticator):
             """
     )
 
+    # FIXME: Profiles haven't been added to JH, needs renaming
+    #  Either the doc needs a note of "hey, call us in you post_auth_hook" or something
     build_user_profile = Bool(
         config=True,
         default_value=False,
@@ -124,7 +127,9 @@ class LDAPAuthenticator(Authenticator):
     )
 
     # FIXME: Use something other than this? THIS IS LAME, akin to websites restricting things you
-    # can use in usernames / passwords to protect from SQL injection!
+    #  can use in usernames / passwords to protect from SQL injection!
+    # Are we covered enough by escape_filter_chars? I'm just not familiar enough with this attack vector.
+    # Alternatively, I suppose r'.*' will just turn it off.
     valid_username_regex = Unicode(
         r'^[a-z][.a-z0-9_-]*$',
         config=True,
@@ -191,27 +196,7 @@ class LDAPAuthenticator(Authenticator):
             """
     )
 
-    # TODO memberOf overlay toggle for whiteliisting
-
-    # FIXME: Whoops, this test may run before the data exists
-    # def __init__(self):
-    #     super().__init__()
-    #
-    #     try:
-    #         # test search filter at least is shaped correctly
-    #         self.search_dn_filter.format(username_attribute=self.username_attribute,
-    #                                             username='format_test')
-    #     except Exception as err:
-    #         self.log.critical("LDAP search filter malformed! Missing 'username_attribute' or 'username': %s", err)
-    #         raise
-    #
-    #     try:
-    #         self.build_connection(self.search_user_dn, self.search_user_password).unbind()
-    #     except Exception as err:
-    #         self.log.critical("Could not complete startup LDAP test bind! %s", err)
-    #         raise
-
-    def build_connection(self, bind_dn, bind_password):
+    def _build_connection(self, bind_dn, bind_password):
         """
         Builds and binds LDAP connection
         :return: Connection object
@@ -255,7 +240,7 @@ class LDAPAuthenticator(Authenticator):
 
         user_dn = self._read_cached_dn(authentication)
 
-        with self.build_connection(self.search_user_dn, self.search_user_password) as ldap:
+        with self._build_connection(self.search_user_dn, self.search_user_password) as ldap:
             ldap.search(search_base=user_dn, search_filter=membership_filter, search_scope=ldap3.BASE)
             self.log.debug('Membership test says: %s', len(ldap.response) > 0)
             return len(ldap.response) > 0
@@ -270,23 +255,28 @@ class LDAPAuthenticator(Authenticator):
             # Either a False (strip admin) or a None (no change)
             return super_admin
 
+    # TODO: Rewritten to be post_auth_hook-compat. Can we rename it to post_auth_hook without breaking everything?
+    #  Make the end user call authenticator.build_profile in their hook?
     def build_profile(self, handler, authentication):
-        # TODO: Figure out username/data selection
-
+        # TODO: I think I've offloaded explicit profiling to post_auth_hook.
+        #  Need to gauge opinions and look into adding hooks to user creation/registration
         # super_profile = super().build_profile(handler, authentication)
         super_profile = {}
 
-        # TODO: set a profile default of {} in get_authenticated_user
+        # TODO: Set better defaults in Authenticator? Handling all these unset values is crazy
+        if authentication['auth_state'] is None or 'profile' not in authentication['auth_state'] or \
+                authentication['auth_state']['profile'] is None:
+            authentication['auth_state'] = {'profile': {}}
         profile = authentication['auth_state']['profile']
         profile.update(super_profile)
 
-        user_dn = self._read_cached_dn(authentication)
-
         if self.build_user_profile:
+            user_dn = self._read_cached_dn(authentication)
+
             # Ok. We're scraping the UID, GID, groups of interest that intersect the user's groups, and those GIDs
-            with self.build_connection(self.search_user_dn, self.search_user_password) as ldap:
+            with self._build_connection(self.search_user_dn, self.search_user_password) as ldap:
                 # Load UID/GID/memberOf
-                # TODO: When memberOf overlay id optional, it probably needs to N group lookups no matter what to simplify
+                # TODO: When memberOf overlay is optional, it probably needs to N group lookups no matter what to simplify
                 self.log.debug("Loading UID/GID/MemberOf for profile")
                 ldap.search(search_base=user_dn, search_filter='(objectClass=*)', search_scope=ldap3.BASE,
                             attributes=[self.profile_uid_attribute, self.profile_gid_attribute, 'memberOf'])
@@ -305,10 +295,9 @@ class LDAPAuthenticator(Authenticator):
                 intersect_groups = target_groups & set(user_entry['memberOf'].value)
                 self.log.debug('Group overlap to enumerate: %s', intersect_groups)
 
-                # FIXME: Better name for dict?
                 # FIXME: EXTREME ASSUMPTION - User private group by default. It's not BAD, just want this to be seen
-                # I want all groups to have a resolved name. This is "private" in name only by default.
-                # If profile_groups pulls in this gid, it will overwrite
+                #   All groups to have a resolved name. This is "private" in name only by default.
+                #   If profile_groups pulls in this gid, it will overwrite
                 # FIXME: Put normalized username in the authenticated dictionary? authenticated['normalized_name']?
                 profile['group_map'] = {profile['gid']: authentication['name']}
                 profile['group_membership'] = set([profile['gid']])
@@ -327,9 +316,10 @@ class LDAPAuthenticator(Authenticator):
 
             profile['group_membership'] = list(profile['group_membership'])
             self.log.debug('Profile enumerated: %s', profile)
-        return
 
-    def user_dn_lookup(self, connection, username):
+        return authentication
+
+    def _user_dn_lookup(self, connection, username):
         """
         Lookup user dn
 
@@ -340,7 +330,7 @@ class LDAPAuthenticator(Authenticator):
 
         # Hopefully this will catch a poorly formatted search filter
         search_filter = self.search_dn_filter.format(username_attribute=self.username_attribute,
-                                                     username=username)
+                                                     username=escape_filter_chars(username))
 
         self.log.debug('Attempting to resolve "%s" with base: "%s" and filter: "%s"', username, self.server_address,
                        self.user_search_base, search_filter)
@@ -367,9 +357,8 @@ class LDAPAuthenticator(Authenticator):
             raise
 
     def check_whitelist(self, username, authentication):
-        # TODO: uncomment when hub is updated
-        # if super().check_whitelist(username, authentication):
-        #     return True
+        if super().check_whitelist(username, authentication):
+            return True
 
         if self.whitelist_groups:
             return self._check_ldap_group_membership(authentication, self.whitelist_groups)
@@ -377,9 +366,8 @@ class LDAPAuthenticator(Authenticator):
             return True
 
     def check_blacklist(self, username, authentication):
-        # TODO: uncomment when hub is updated
-        # if super().check_blacklist(username, authentication):
-        #    return True
+        if not super().check_blacklist(username, authentication):
+            return False
 
         if self.blacklist_groups:
             return self._check_ldap_group_membership(authentication, self.blacklist_groups)
@@ -404,18 +392,16 @@ class LDAPAuthenticator(Authenticator):
 
         self.log.debug('Connecting to server and resolving "%s".', username)
 
-        user_dn = self.user_dn_lookup(self.build_connection(self.search_user_dn, self.search_user_password),
-                                      username)
+        user_dn = self._user_dn_lookup(self._build_connection(self.search_user_dn, self.search_user_password), username)
 
         if user_dn is None:
             return None
 
         self.log.info('"%s" attempting login, checking password', user_dn)
 
-        # I'd like to just rebind the existing connection, but
-        # maybe that user lacks permissions to read data we need
+        # I'd like to just rebind the existing connection, but that user could lack permissions to read the data we need
         try:
-            self.build_connection(user_dn, password)
+            self._build_connection(user_dn, password)
         except Exception as err:
             if isinstance(err, ldap3.core.exceptions.LDAPBindError) or isinstance(err, ldap3.core.exceptions.LDAPInvalidCredentialsResult):
                 self.log.info('Password rejected for %s', username)
@@ -508,7 +494,7 @@ if __name__ == "__main__":
 
     if c.build_user_profile:
         print("Building profile...")
-        c.build_profile(None, None, auth_result['name'], auth_result)
+        c.build_profile(None, auth_result)
         print(auth_result)
     else:
         print("Profiling disabled.")
