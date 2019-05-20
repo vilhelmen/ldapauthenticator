@@ -332,7 +332,7 @@ class LDAPAuthenticator(Authenticator):
         search_filter = self.search_dn_filter.format(username_attribute=self.username_attribute,
                                                      username=escape_filter_chars(username))
 
-        self.log.debug('Attempting to resolve "%s" with base: "%s" and filter: "%s"', username, self.server_address,
+        self.log.debug('Attempting to resolve "%s" on "%s" with base: "%s" and filter: "%s"', username, self.server_address,
                        self.user_search_base, search_filter)
 
         try:
