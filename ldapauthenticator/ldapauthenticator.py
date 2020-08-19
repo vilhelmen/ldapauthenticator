@@ -78,6 +78,15 @@ class LDAPAuthenticator(Authenticator):
             """
     )
 
+    advanced_groups = List(
+        config=True,
+        default_value=None,
+        allow_none=True,
+        help="""
+            List of groups that indicates "advanced access" in the profile.
+            """
+    )
+
     # FIXME: Profiles haven't been added to JH, needs renaming
     #  Either the doc needs a note of "hey, call us in you post_auth_hook" or something
     build_user_profile = Bool(
@@ -289,6 +298,15 @@ class LDAPAuthenticator(Authenticator):
                 profile['uid'] = user_entry[self.profile_uid_attribute].value
                 profile['gid'] = user_entry[self.profile_gid_attribute].value
                 self.log.debug('Found UID %s and GID %s', profile['uid'], profile['gid'])
+
+                # check for membership in advanced groups
+                profile['advanced'] = False
+                if self.advanced_groups is not None:
+                    target_groups = set(self.advanced_groups)
+                    intersect_groups = target_groups & set(user_entry['memberOf'].value)
+                    if intersect_groups:
+                        self.log.debug('Found ADV groups: %s', intersect_groups)
+                        profile['advanced'] = True
 
                 # I don't trust user/server escaping to line up... But I'll go with it for now
                 target_groups = set(self.profile_groups)
